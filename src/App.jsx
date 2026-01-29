@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   BarChart,
   Bar,
@@ -21,6 +20,15 @@ const navProjects = [
   "Detect360",
   "Health Fabric",
 ];
+
+function Card({ className = "", children }) {
+  return <div className={`rounded-2xl shadow bg-white ${className}`}>{children}</div>;
+}
+
+function CardContent({ className = "", children }) {
+  return <div className={`p-4 ${className}`}>{children}</div>;
+}
+
 
 /**
  * DEMO DATA (swap with JIRA-derived metrics)
