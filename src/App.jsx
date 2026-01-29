@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Card, CardContent } from "./components/Card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   BarChart,
   Bar,
@@ -24,10 +24,6 @@ const navProjects = [
 
 /**
  * DEMO DATA (swap with JIRA-derived metrics)
- * - plannedVsActual: coarse time buckets
- * - sprints: sprint-level committed/completed and scope change
- * - velocity: trend line (often equals completed SP per sprint)
- * - features: only used in per-project view
  */
 const portfolio = {
   "MedeWorks Core": {
@@ -38,7 +34,6 @@ const portfolio = {
       { period: "Last Month", Planned: 420, Actual: 395 },
       { period: "YTD", Planned: 4650, Actual: 4380 },
     ],
-    // Committed = initial sprint commitment; AddedScope = points added mid-sprint; Completed = accepted
     sprints: [
       { sprint: "S1", Committed: 72, AddedScope: 6, Completed: 72 },
       { sprint: "S2", Committed: 78, AddedScope: 10, Completed: 78 },
@@ -187,44 +182,32 @@ const portfolio = {
       { feature: "Data Quality Rules", estSP: 55, devs: 1, availSP: 40, completedSP: 34 },
     ],
   },
-} as const;
+};
 
-type ProjectName = keyof typeof portfolio;
-
-function sum(nums: number[]) {
+function sum(nums) {
   return nums.reduce((a, b) => a + b, 0);
 }
 
-function pct(n: number, d: number) {
+function pct(n, d) {
   if (!d) return 0;
   return (n / d) * 100;
 }
 
-function fmtPct(v: number) {
+function fmtPct(v) {
   return `${Math.round(v)}%`;
 }
 
-function chipClass(level: "green" | "yellow" | "red") {
+function chipClass(level) {
   if (level === "green") return "bg-emerald-100 text-emerald-800 border-emerald-200";
   if (level === "yellow") return "bg-amber-100 text-amber-800 border-amber-200";
   return "bg-rose-100 text-rose-800 border-rose-200";
 }
 
-function confidenceFromKPIs(k: {
-  predictability: number;
-  spilloverRate: number;
-  scopeChangeRate: number;
-  utilization: number;
-}) {
-  const p = k.predictability;
-  const s = k.spilloverRate;
-  const c = k.scopeChangeRate;
-  const u = k.utilization;
-
-  const pLevel = p >= 0.9 ? "green" : p >= 0.75 ? "yellow" : "red";
-  const sLevel = s <= 0.1 ? "green" : s <= 0.25 ? "yellow" : "red";
-  const cLevel = c <= 0.15 ? "green" : c <= 0.35 ? "yellow" : "red";
-  const uLevel = u >= 0.75 && u <= 1.05 ? "green" : u >= 0.6 && u <= 1.2 ? "yellow" : "red";
+function confidenceFromKPIs({ predictability, spilloverRate, scopeChangeRate, utilization }) {
+  const pLevel = predictability >= 0.9 ? "green" : predictability >= 0.75 ? "yellow" : "red";
+  const sLevel = spilloverRate <= 0.1 ? "green" : spilloverRate <= 0.25 ? "yellow" : "red";
+  const cLevel = scopeChangeRate <= 0.15 ? "green" : scopeChangeRate <= 0.35 ? "yellow" : "red";
+  const uLevel = utilization >= 0.75 && utilization <= 1.05 ? "green" : utilization >= 0.6 && utilization <= 1.2 ? "yellow" : "red";
 
   const score =
     0.4 * (pLevel === "green" ? 1 : pLevel === "yellow" ? 0.6 : 0.2) +
@@ -233,24 +216,20 @@ function confidenceFromKPIs(k: {
     0.15 * (uLevel === "green" ? 1 : uLevel === "yellow" ? 0.6 : 0.2);
 
   const overall = score >= 0.8 ? "green" : score >= 0.55 ? "yellow" : "red";
-  return { overall, pLevel, sLevel, cLevel, uLevel, score } as const;
+  return { overall, pLevel, sLevel, cLevel, uLevel, score };
 }
 
-function computeKPIs(p: {
-  capacitySP: number;
-  plannedVsActual: Array<{ period: string; Planned: number; Actual: number }>;
-  sprints: Array<{ sprint: string; Committed: number; AddedScope: number; Completed: number }>;
-}) {
-  const ytd = p.plannedVsActual.find((x) => x.period === "YTD");
-  const lastMonth = p.plannedVsActual.find((x) => x.period === "Last Month");
+function computeKPIs({ capacitySP, plannedVsActual, sprints }) {
+  const ytd = plannedVsActual.find((x) => x.period === "YTD");
+  const lastMonth = plannedVsActual.find((x) => x.period === "Last Month");
 
-  const committed = sum(p.sprints.map((s) => s.Committed));
-  const completed = sum(p.sprints.map((s) => s.Completed));
-  const added = sum(p.sprints.map((s) => s.AddedScope));
+  const committed = sum(sprints.map((s) => s.Committed));
+  const completed = sum(sprints.map((s) => s.Completed));
+  const added = sum(sprints.map((s) => s.AddedScope));
 
   const carryoverBySprint = (() => {
     let cum = 0;
-    return p.sprints.map((s) => {
+    return sprints.map((s) => {
       const carry = Math.max(0, s.Committed + s.AddedScope - s.Completed);
       cum += carry;
       return { sprint: s.sprint, Carryover: carry, Cumulative: cum };
@@ -263,7 +242,7 @@ function computeKPIs(p: {
   const spilloverRate = committed ? totalCarryover / committed : 0;
   const scopeChangeRate = committed ? added / committed : 0;
 
-  const utilization = p.capacitySP ? (lastMonth?.Actual ?? 0) / p.capacitySP : 0;
+  const utilization = capacitySP ? (lastMonth?.Actual ?? 0) / capacitySP : 0;
   const confidence = confidenceFromKPIs({ predictability, spilloverRate, scopeChangeRate, utilization });
 
   return {
@@ -278,8 +257,8 @@ function computeKPIs(p: {
   };
 }
 
-export default function App() {
-  const [selectedProject, setSelectedProject] = useState<(typeof navProjects)[number]>("All Projects");
+export default function AgileDashboard() {
+  const [selectedProject, setSelectedProject] = useState("All Projects");
   const isPortfolioView = selectedProject === "All Projects";
 
   const portfolioTotals = useMemo(() => {
@@ -315,149 +294,141 @@ export default function App() {
       plannedVsActual,
       sprints,
       velocity,
-      capacityByProject: items.map((x) => ({ name: x.name, devs: x.devs, capacitySP: x.capacitySP })),
       kpis,
     };
   }, []);
 
-  const current = isPortfolioView ? null : portfolio[selectedProject as ProjectName];
+  const current = isPortfolioView ? null : portfolio[selectedProject];
 
-  const plannedVsActual = isPortfolioView ? portfolioTotals.plannedVsActual : current!.plannedVsActual;
-  const velocity = isPortfolioView ? portfolioTotals.velocity : current!.velocity;
-  const sprints = isPortfolioView ? portfolioTotals.sprints : current!.sprints;
+  const plannedVsActual = isPortfolioView ? portfolioTotals.plannedVsActual : current.plannedVsActual;
+  const velocity = isPortfolioView ? portfolioTotals.velocity : current.velocity;
+  const sprints = isPortfolioView ? portfolioTotals.sprints : current.sprints;
+
   const kpis = isPortfolioView
     ? portfolioTotals.kpis
     : computeKPIs({
-        capacitySP: current!.capacitySP,
-        plannedVsActual: current!.plannedVsActual,
-        sprints: current!.sprints,
+        capacitySP: current.capacitySP,
+        plannedVsActual: current.plannedVsActual,
+        sprints: current.sprints,
       });
 
   const carryoverChart = kpis.carryoverBySprint;
 
-  // --- Burndown data (ideal vs actual remaining) ---
-  const burndownData = (() => {
+  const burndownData = useMemo(() => {
     const totalCommitted = sum(sprints.map((s) => s.Committed + s.AddedScope));
     let remainingActual = totalCommitted;
 
     return sprints.map((s, idx, arr) => {
       remainingActual -= s.Completed;
       const ideal = totalCommitted * (1 - idx / Math.max(1, arr.length - 1));
-      return { sprint: s.sprint, Ideal: Math.max(0, Math.round(ideal)), Actual: Math.max(0, remainingActual) };
+      return {
+        sprint: s.sprint,
+        Ideal: Math.max(0, Math.round(ideal)),
+        Actual: Math.max(0, remainingActual),
+      };
     });
-  })();
+  }, [sprints]);
 
-  const confidenceLabel =
-    kpis.confidence.overall === "green" ? "Green" : kpis.confidence.overall === "yellow" ? "Yellow" : "Red";
+  const confidenceLabel = kpis.confidence.overall === "green" ? "Green" : kpis.confidence.overall === "yellow" ? "Yellow" : "Red";
 
   return (
-    <div style={{ display: "flex", height: "100vh", background: "#eef2f7" }}>
-      {/* Sidebar */}
-      <aside style={{ width: 280, background: "#0f172a", color: "white", padding: 16 }}>
-        <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 10 }}>Portfolio</div>
-        <div style={{ fontSize: 12, color: "#cbd5e1", marginBottom: 12 }}>
-          Portfolio view aggregates all projects. Project views include feature tracking.
-        </div>
-        <div style={{ display: "grid", gap: 8 }}>
-          {navProjects.map((p) => (
-            <div
-              key={p}
-              onClick={() => setSelectedProject(p)}
-              style={{
-                cursor: "pointer",
-                padding: "10px 12px",
-                borderRadius: 10,
-                background: selectedProject === p ? "#2563eb" : "transparent",
-              }}
-            >
-              {p}
+    <div className="flex h-screen flex-col bg-gradient-to-br from-slate-100 to-slate-200">
+      {/* Top navigation */}
+      <header className="sticky top-0 z-10 bg-slate-900 text-white shadow-xl">
+        <div className="mx-auto max-w-7xl px-4 py-3">
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-lg font-semibold">Agile Portfolio Leadership Dashboard</div>
+                <div className="text-xs text-slate-300">Switch projects to drill in. Portfolio view aggregates across all projects.</div>
+              </div>
+
+              <div className={`inline-flex items-center gap-2 px-2 py-1 rounded-full border text-xs font-semibold ${chipClass(kpis.confidence.overall)}`}>
+                <span className={`h-2 w-2 rounded-full ${kpis.confidence.overall === "green" ? "bg-emerald-500" : kpis.confidence.overall === "yellow" ? "bg-amber-500" : "bg-rose-500"}`} />
+                Confidence: {confidenceLabel}
+              </div>
             </div>
-          ))}
+
+            <div className="flex flex-wrap gap-2">
+              {navProjects.map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setSelectedProject(p)}
+                  className={`rounded-full px-3 py-1 text-sm transition border ${
+                    selectedProject === p
+                      ? "bg-blue-600 border-blue-500"
+                      : "bg-slate-800 border-slate-700 hover:bg-slate-700"
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
-      </aside>
+      </header>
 
       {/* Main */}
-      <main style={{ flex: 1, padding: 18, overflow: "auto" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", marginBottom: 14 }}>
-          <div style={{ fontSize: 22, fontWeight: 800, color: "#0f172a" }}>
-            {selectedProject} – Executive Agile Dashboard
+      <main className="flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-7xl p-6">
+          <div className="mb-6 flex flex-col gap-2">
+            <h1 className="text-2xl font-bold text-slate-800">{selectedProject}</h1>
+            <div className="text-sm text-slate-600">
+              {isPortfolioView
+                ? `Portfolio totals: ${portfolioTotals.devs} developers · ${portfolioTotals.capacitySP} SP capacity`
+                : `Team size: ${current.devs} developers · ${current.capacitySP} SP capacity`}
+            </div>
           </div>
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "6px 10px",
-              borderRadius: 999,
-              border: "1px solid #e2e8f0",
-              background:
-                kpis.confidence.overall === "green"
-                  ? "#dcfce7"
-                  : kpis.confidence.overall === "yellow"
-                  ? "#fef3c7"
-                  : "#ffe4e6",
-              color:
-                kpis.confidence.overall === "green"
-                  ? "#065f46"
-                  : kpis.confidence.overall === "yellow"
-                  ? "#92400e"
-                  : "#9f1239",
-              fontSize: 12,
-              fontWeight: 700,
-            }}
-          >
-            <span
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: 999,
-                background:
-                  kpis.confidence.overall === "green"
-                    ? "#10b981"
-                    : kpis.confidence.overall === "yellow"
-                    ? "#f59e0b"
-                    : "#ef4444",
-              }}
-            />
-            Confidence: {confidenceLabel}
+
+          {/* EXEC KPIs */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <Card className="rounded-2xl shadow">
+              <CardContent>
+                <div className="text-xs text-slate-500">Predictability (Completed / Committed)</div>
+                <div className="text-2xl font-bold text-slate-900">{fmtPct(kpis.predictability * 100)}</div>
+                <div className={`mt-2 inline-flex px-2 py-1 rounded-full border text-xs font-semibold ${chipClass(kpis.confidence.pLevel)}`}>
+                  {String(kpis.confidence.pLevel).toUpperCase()}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-2xl shadow">
+              <CardContent>
+                <div className="text-xs text-slate-500">Spillover Rate (Unfinished / Committed)</div>
+                <div className="text-2xl font-bold text-slate-900">{fmtPct(kpis.spilloverRate * 100)}</div>
+                <div className={`mt-2 inline-flex px-2 py-1 rounded-full border text-xs font-semibold ${chipClass(kpis.confidence.sLevel)}`}>
+                  {String(kpis.confidence.sLevel).toUpperCase()}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-2xl shadow">
+              <CardContent>
+                <div className="text-xs text-slate-500">Scope Change (Added / Committed)</div>
+                <div className="text-2xl font-bold text-slate-900">{fmtPct(kpis.scopeChangeRate * 100)}</div>
+                <div className={`mt-2 inline-flex px-2 py-1 rounded-full border text-xs font-semibold ${chipClass(kpis.confidence.cLevel)}`}>
+                  {String(kpis.confidence.cLevel).toUpperCase()}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-2xl shadow">
+              <CardContent>
+                <div className="text-xs text-slate-500">Capacity Utilization (Last Month)</div>
+                <div className="text-2xl font-bold text-slate-900">{fmtPct(kpis.utilization * 100)}</div>
+                <div className={`mt-2 inline-flex px-2 py-1 rounded-full border text-xs font-semibold ${chipClass(kpis.confidence.uLevel)}`}>
+                  {String(kpis.confidence.uLevel).toUpperCase()}
+                </div>
+              </CardContent>
+            </Card>
           </div>
-        </div>
 
-        {/* KPI cards */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginBottom: 14 }}>
-          <Card>
-            <CardContent>
-              <div style={{ fontSize: 12, color: "#64748b" }}>Predictability (Completed / Committed)</div>
-              <div style={{ fontSize: 26, fontWeight: 800, color: "#0f172a" }}>{fmtPct(kpis.predictability * 100)}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent>
-              <div style={{ fontSize: 12, color: "#64748b" }}>Spillover (Unfinished / Committed)</div>
-              <div style={{ fontSize: 26, fontWeight: 800, color: "#0f172a" }}>{fmtPct(kpis.spilloverRate * 100)}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent>
-              <div style={{ fontSize: 12, color: "#64748b" }}>Scope Change (Added / Committed)</div>
-              <div style={{ fontSize: 26, fontWeight: 800, color: "#0f172a" }}>{fmtPct(kpis.scopeChangeRate * 100)}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent>
-              <div style={{ fontSize: 12, color: "#64748b" }}>Utilization (Last Month / Capacity)</div>
-              <div style={{ fontSize: 26, fontWeight: 800, color: "#0f172a" }}>{fmtPct(kpis.utilization * 100)}</div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Charts */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 12, marginBottom: 14 }}>
-          <Card>
-            <CardContent>
-              <div style={{ fontWeight: 700, marginBottom: 6, color: "#334155" }}>Planned vs Actual (Last Sprint / Month / YTD)</div>
-              <div style={{ width: "100%", height: 240 }}>
-                <ResponsiveContainer>
+          {/* Core Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <Card className="rounded-2xl shadow">
+              <CardContent>
+                <h3 className="font-semibold mb-2 text-slate-700">Planned vs Actual (Last Sprint / Month / YTD)</h3>
+                <ResponsiveContainer width="100%" height={240}>
                   <BarChart data={plannedVsActual}>
                     <XAxis dataKey="period" />
                     <YAxis />
@@ -467,18 +438,16 @@ export default function App() {
                     <Bar dataKey="Actual" fill="#34d399" />
                   </BarChart>
                 </ResponsiveContainer>
-              </div>
-              <div style={{ fontSize: 12, color: "#64748b", marginTop: 6 }}>
-                Delivery vs Plan (YTD): <b>{fmtPct(pct(kpis.ytdActual, kpis.ytdPlanned))}</b>
-              </div>
-            </CardContent>
-          </Card>
+                <div className="mt-2 text-xs text-slate-600">
+                  Delivery vs Plan (YTD): <span className="font-semibold">{fmtPct(pct(kpis.ytdActual, kpis.ytdPlanned))}</span>
+                </div>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardContent>
-              <div style={{ fontWeight: 700, marginBottom: 6, color: "#334155" }}>Velocity</div>
-              <div style={{ width: "100%", height: 240 }}>
-                <ResponsiveContainer>
+            <Card className="rounded-2xl shadow">
+              <CardContent>
+                <h3 className="font-semibold mb-2 text-slate-700">Velocity</h3>
+                <ResponsiveContainer width="100%" height={240}>
                   <LineChart data={velocity}>
                     <XAxis dataKey="sprint" />
                     <YAxis />
@@ -486,15 +455,16 @@ export default function App() {
                     <Line dataKey="velocity" stroke="#6366f1" strokeWidth={3} dot={{ r: 3 }} />
                   </LineChart>
                 </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
+                <div className="mt-2 text-xs text-slate-600">
+                  Avg velocity: <span className="font-semibold">{Math.round(sum(velocity.map((v) => v.velocity)) / Math.max(1, velocity.length))} SP</span>
+                </div>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardContent>
-              <div style={{ fontWeight: 700, marginBottom: 6, color: "#334155" }}>Unfinished SP (Carryover) Accumulation</div>
-              <div style={{ width: "100%", height: 240 }}>
-                <ResponsiveContainer>
+            <Card className="rounded-2xl shadow">
+              <CardContent>
+                <h3 className="font-semibold mb-2 text-slate-700">Unfinished SP Accumulation</h3>
+                <ResponsiveContainer width="100%" height={240}>
                   <LineChart data={carryoverChart}>
                     <XAxis dataKey="sprint" />
                     <YAxis />
@@ -504,15 +474,16 @@ export default function App() {
                     <Line dataKey="Cumulative" stroke="#ef4444" strokeWidth={3} dot={{ r: 3 }} />
                   </LineChart>
                 </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
+                <div className="mt-2 text-xs text-slate-600">
+                  Cumulative unfinished: <span className="font-semibold">{carryoverChart[carryoverChart.length - 1]?.Cumulative ?? 0} SP</span>
+                </div>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardContent>
-              <div style={{ fontWeight: 700, marginBottom: 6, color: "#334155" }}>Burndown (Ideal vs Actual Remaining)</div>
-              <div style={{ width: "100%", height: 240 }}>
-                <ResponsiveContainer>
+            <Card className="rounded-2xl shadow">
+              <CardContent>
+                <h3 className="font-semibold mb-2 text-slate-700">Sprint Burndown</h3>
+                <ResponsiveContainer width="100%" height={240}>
                   <LineChart data={burndownData}>
                     <XAxis dataKey="sprint" />
                     <YAxis />
@@ -522,144 +493,127 @@ export default function App() {
                     <Line dataKey="Actual" stroke="#6366f1" strokeWidth={3} dot={{ r: 3 }} />
                   </LineChart>
                 </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
+                <div className="mt-2 text-xs text-slate-600">Ideal vs actual remaining across sprints</div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Portfolio: per-project cumulative YTD summary */}
+          {isPortfolioView && (
+            <Card className="rounded-2xl shadow mb-6">
+              <CardContent>
+                <h3 className="font-semibold mb-3 text-slate-700">Project YTD Summary (Cumulative)</h3>
+                <div className="text-xs text-slate-600 mb-3">
+                  Per project: YTD planned SP, YTD completed SP, and cumulative unfinished SP (carryover accumulation across shown sprints).
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-slate-100">
+                      <tr>
+                        <th className="p-2 text-left">Project</th>
+                        <th className="p-2 text-center">Developers</th>
+                        <th className="p-2 text-center">Capacity (SP)</th>
+                        <th className="p-2 text-center">YTD Planned (SP)</th>
+                        <th className="p-2 text-center">YTD Completed (SP)</th>
+                        <th className="p-2 text-center">YTD Unfinished (SP)</th>
+                        <th className="p-2 text-center">Confidence</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(portfolio).map(([name, p]) => {
+                        const k = computeKPIs({ capacitySP: p.capacitySP, plannedVsActual: p.plannedVsActual, sprints: p.sprints });
+                        const unfinished = k.carryoverBySprint[k.carryoverBySprint.length - 1]?.Cumulative ?? 0;
+                        const conf = k.confidence.overall;
+                        const confLabel = conf === "green" ? "Green" : conf === "yellow" ? "Yellow" : "Red";
+                        return (
+                          <tr key={name} className="border-t bg-white">
+                            <td className="p-2 text-slate-900 font-semibold">{name}</td>
+                            <td className="p-2 text-center">{p.devs}</td>
+                            <td className="p-2 text-center">{p.capacitySP}</td>
+                            <td className="p-2 text-center">{k.ytdPlanned}</td>
+                            <td className="p-2 text-center font-semibold">{k.ytdActual}</td>
+                            <td className="p-2 text-center font-semibold text-rose-700">{unfinished}</td>
+                            <td className="p-2 text-center">
+                              <span className={`inline-flex items-center gap-2 px-2 py-1 rounded-full border text-xs font-semibold ${chipClass(conf)}`}>
+                                <span className={`h-2 w-2 rounded-full ${conf === "green" ? "bg-emerald-500" : conf === "yellow" ? "bg-amber-500" : "bg-rose-500"}`} />
+                                {confLabel}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Feature-level: ONLY on project views */}
+          {!isPortfolioView && (
+            <Card className="rounded-2xl shadow">
+              <CardContent>
+                <div className="flex items-baseline justify-between gap-4 mb-4">
+                  <h3 className="font-semibold text-slate-700">Feature-Level Delivery</h3>
+                  <div className="text-xs text-slate-600">Project only · estimate, staffing, available capacity and completion</div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-slate-100">
+                      <tr>
+                        <th className="p-2 text-left">Feature</th>
+                        <th className="p-2 text-center">Estimated SP</th>
+                        <th className="p-2 text-center">Devs Assigned</th>
+                        <th className="p-2 text-center">Available SP</th>
+                        <th className="p-2 text-center">Completed SP</th>
+                        <th className="p-2 text-center">Completion %</th>
+                        <th className="p-2 text-center">Staffing Fit</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {current.features.map((f) => {
+                        const completion = Math.round((f.completedSP / Math.max(1, f.estSP)) * 100);
+                        const staffingFit = Math.round((f.availSP / Math.max(1, f.estSP)) * 100);
+                        return (
+                          <tr key={f.feature} className="border-t">
+                            <td className="p-2 text-slate-800">{f.feature}</td>
+                            <td className="p-2 text-center">{f.estSP}</td>
+                            <td className="p-2 text-center">{f.devs}</td>
+                            <td className="p-2 text-center">{f.availSP}</td>
+                            <td className="p-2 text-center font-semibold text-slate-900">{f.completedSP}</td>
+                            <td className={`p-2 text-center font-semibold ${completion >= 90 ? "text-emerald-600" : completion >= 70 ? "text-amber-600" : "text-rose-600"}`}>
+                              {completion}%
+                            </td>
+                            <td className={`p-2 text-center font-semibold ${staffingFit >= 100 ? "text-emerald-600" : staffingFit >= 85 ? "text-amber-600" : "text-rose-600"}`}>
+                              {staffingFit}%
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="rounded-xl bg-white border p-3">
+                    <div className="text-xs text-slate-500">Total Feature Estimate</div>
+                    <div className="text-lg font-semibold text-slate-900">{sum(current.features.map((f) => f.estSP))} SP</div>
+                  </div>
+                  <div className="rounded-xl bg-white border p-3">
+                    <div className="text-xs text-slate-500">Total Available SP</div>
+                    <div className="text-lg font-semibold text-slate-900">{sum(current.features.map((f) => f.availSP))} SP</div>
+                  </div>
+                  <div className="rounded-xl bg-white border p-3">
+                    <div className="text-xs text-slate-500">Total Completed SP</div>
+                    <div className="text-lg font-semibold text-slate-900">{sum(current.features.map((f) => f.completedSP))} SP</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
-
-        {/* Portfolio project summary table */}
-        {isPortfolioView && (
-          <Card>
-            <CardContent>
-              <div style={{ fontWeight: 800, color: "#334155", marginBottom: 6 }}>Project YTD Summary (Cumulative)</div>
-              <div style={{ fontSize: 12, color: "#64748b", marginBottom: 10 }}>
-                YTD Planned, YTD Completed, and cumulative unfinished carryover per project.
-              </div>
-
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                  <thead>
-                    <tr style={{ background: "#f1f5f9" }}>
-                      {["Project", "Developers", "Capacity (SP)", "YTD Planned", "YTD Completed", "YTD Unfinished", "Confidence"].map((h) => (
-                        <th key={h} style={{ textAlign: h === "Project" ? "left" : "center", padding: 10, borderBottom: "1px solid #e2e8f0" }}>
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {Object.entries(portfolio).map(([name, p]) => {
-                      const k = computeKPIs({ capacitySP: p.capacitySP, plannedVsActual: p.plannedVsActual, sprints: p.sprints });
-                      const unfinished = k.carryoverBySprint[k.carryoverBySprint.length - 1]?.Cumulative ?? 0;
-                      return (
-                        <tr key={name}>
-                          <td style={{ padding: 10, borderBottom: "1px solid #e2e8f0", fontWeight: 700, color: "#0f172a" }}>{name}</td>
-                          <td style={{ padding: 10, borderBottom: "1px solid #e2e8f0", textAlign: "center" }}>{p.devs}</td>
-                          <td style={{ padding: 10, borderBottom: "1px solid #e2e8f0", textAlign: "center" }}>{p.capacitySP}</td>
-                          <td style={{ padding: 10, borderBottom: "1px solid #e2e8f0", textAlign: "center" }}>{k.ytdPlanned}</td>
-                          <td style={{ padding: 10, borderBottom: "1px solid #e2e8f0", textAlign: "center", fontWeight: 800 }}>{k.ytdActual}</td>
-                          <td style={{ padding: 10, borderBottom: "1px solid #e2e8f0", textAlign: "center", fontWeight: 800, color: "#be123c" }}>{unfinished}</td>
-                          <td style={{ padding: 10, borderBottom: "1px solid #e2e8f0", textAlign: "center" }}>
-                            <span
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 6,
-                                padding: "4px 8px",
-                                borderRadius: 999,
-                                border: "1px solid #e2e8f0",
-                                background:
-                                  k.confidence.overall === "green"
-                                    ? "#dcfce7"
-                                    : k.confidence.overall === "yellow"
-                                    ? "#fef3c7"
-                                    : "#ffe4e6",
-                                color:
-                                  k.confidence.overall === "green"
-                                    ? "#065f46"
-                                    : k.confidence.overall === "yellow"
-                                    ? "#92400e"
-                                    : "#9f1239",
-                                fontSize: 12,
-                                fontWeight: 800,
-                              }}
-                            >
-                              <span
-                                style={{
-                                  width: 8,
-                                  height: 8,
-                                  borderRadius: 999,
-                                  background:
-                                    k.confidence.overall === "green"
-                                      ? "#10b981"
-                                      : k.confidence.overall === "yellow"
-                                      ? "#f59e0b"
-                                      : "#ef4444",
-                                }}
-                              />
-                              {k.confidence.overall.toUpperCase()}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    <tr style={{ background: "#f8fafc" }}>
-                      <td style={{ padding: 10, fontWeight: 800 }}>Portfolio Total</td>
-                      <td style={{ padding: 10, textAlign: "center", fontWeight: 800 }}>{portfolioTotals.devs}</td>
-                      <td style={{ padding: 10, textAlign: "center", fontWeight: 800 }}>{portfolioTotals.capacitySP}</td>
-                      <td style={{ padding: 10, textAlign: "center", fontWeight: 800 }}>{portfolioTotals.kpis.ytdPlanned}</td>
-                      <td style={{ padding: 10, textAlign: "center", fontWeight: 800 }}>{portfolioTotals.kpis.ytdActual}</td>
-                      <td style={{ padding: 10, textAlign: "center", fontWeight: 800, color: "#be123c" }}>
-                        {portfolioTotals.kpis.carryoverBySprint[portfolioTotals.kpis.carryoverBySprint.length - 1]?.Cumulative ?? 0}
-                      </td>
-                      <td style={{ padding: 10, textAlign: "center", fontWeight: 800 }}>{portfolioTotals.kpis.confidence.overall.toUpperCase()}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Feature-level: ONLY on project views */}
-        {!isPortfolioView && (
-          <Card>
-            <CardContent>
-              <div style={{ fontWeight: 800, color: "#334155", marginBottom: 6 }}>Feature-Level Delivery (Project Only)</div>
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                  <thead>
-                    <tr style={{ background: "#f1f5f9" }}>
-                      {["Feature", "Estimated SP", "Devs Assigned", "Available SP", "Completed SP", "Completion %", "Staffing Fit"].map((h) => (
-                        <th key={h} style={{ textAlign: h === "Feature" ? "left" : "center", padding: 10, borderBottom: "1px solid #e2e8f0" }}>
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {current!.features.map((f) => {
-                      const completion = Math.round((f.completedSP / Math.max(1, f.estSP)) * 100);
-                      const staffingFit = Math.round((f.availSP / Math.max(1, f.estSP)) * 100);
-                      const color = completion >= 90 ? "#059669" : completion >= 70 ? "#d97706" : "#e11d48";
-                      return (
-                        <tr key={f.feature}>
-                          <td style={{ padding: 10, borderBottom: "1px solid #e2e8f0", fontWeight: 700 }}>{f.feature}</td>
-                          <td style={{ padding: 10, borderBottom: "1px solid #e2e8f0", textAlign: "center" }}>{f.estSP}</td>
-                          <td style={{ padding: 10, borderBottom: "1px solid #e2e8f0", textAlign: "center" }}>{f.devs}</td>
-                          <td style={{ padding: 10, borderBottom: "1px solid #e2e8f0", textAlign: "center" }}>{f.availSP}</td>
-                          <td style={{ padding: 10, borderBottom: "1px solid #e2e8f0", textAlign: "center", fontWeight: 800 }}>{f.completedSP}</td>
-                          <td style={{ padding: 10, borderBottom: "1px solid #e2e8f0", textAlign: "center", fontWeight: 800, color }}>{completion}%</td>
-                          <td style={{ padding: 10, borderBottom: "1px solid #e2e8f0", textAlign: "center", fontWeight: 800 }}>{staffingFit}%</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        )}
       </main>
     </div>
   );
